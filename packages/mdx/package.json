@@ -1,12 +1,12 @@
 {
   "name": "fs-mdx",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An MDX source for Fumadocs",
   "keywords": [
     "NextJs",
     "Docs"
   ],
-  "repository": "github:pomber/fs-docs",
+  "repository": "github:pomber/fs-mdx",
   "license": "MIT",
   "author": "pomber",
   "type": "module",

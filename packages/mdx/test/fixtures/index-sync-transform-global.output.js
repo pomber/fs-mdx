@@ -1,4 +1,4 @@
-import { toRuntime, toRuntimeAsync } from "fumadocs-mdx"
+import { toRuntime, toRuntimeAsync } from "fs-mdx"
 import * as docs_0 from "./index.mdx?collection=docs&hash=hash"
 import * as docs_1 from "./folder/test.mdx?collection=docs&hash=hash"
 import { default as c_default, docs as c_docs } from "./config.ts"

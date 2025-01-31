@@ -20,7 +20,7 @@ export async function generateJS(
     {
       type: 'named',
       names: ['toRuntime', 'toRuntimeAsync'],
-      specifier: 'fumadocs-mdx',
+      specifier: 'fs-mdx',
     },
   ];
   const importedCollections = new Set<string>();
@@ -157,9 +157,7 @@ export function generateTypes(
   const importPath = JSON.stringify(
     toImportPath(configPath, path.dirname(outputPath)),
   );
-  const lines: string[] = [
-    'import type { GetOutput } from "fumadocs-mdx/config"',
-  ];
+  const lines: string[] = ['import type { GetOutput } from "fs-mdx/config"'];
 
   for (const name of config.collections.keys()) {
     lines.push(
