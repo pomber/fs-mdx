@@ -40,6 +40,7 @@ export interface MetaCollection<
   TransformOutput = unknown,
 > extends BaseCollection<Schema> {
   type: 'meta';
+  output?: string;
 
   /**
    * Do transformation in runtime.
@@ -61,6 +62,7 @@ export interface DocCollection<
   TransformOutput = unknown,
 > extends BaseCollection<Schema> {
   type: 'doc';
+  output?: string;
 
   /**
    * Do transformation in runtime.
@@ -136,6 +138,7 @@ export function defineDocs<
    *  @defaultValue 'content/docs'
    */
   dir?: string | string[];
+  output?: string;
 
   docs?: Partial<DocCollection<DocData, DocAsync, DocOut>>;
   meta?: Partial<MetaCollection<MetaData, MetaOut>>;
@@ -149,12 +152,14 @@ export function defineDocs<
     docs: defineCollections({
       type: 'doc',
       dir,
+      output: options?.output,
       schema: frontmatterSchema as unknown as DocData,
       ...options?.docs,
     }),
     meta: defineCollections({
       type: 'meta',
       dir,
+      output: options?.output,
       schema: metaSchema as unknown as MetaData,
       ...options?.meta,
     }),
