@@ -167,3 +167,43 @@ export function generateTypes(
 
   return lines.join('\n');
 }
+
+export async function generateFM(
+  configPath: string,
+  config: LoadedConfig,
+  outputPath: string,
+  configHash: string,
+  getFrontmatter: (file: string) => Promise<unknown>,
+): Promise<string> {
+  const entries = Array.from(config.collections.entries());
+  let content = '';
+
+  await Promise.all(
+    entries.map(async ([k, collection]) => {
+      if (collection.type !== 'doc') {
+        return;
+      }
+
+      const files = await getCollectionFiles(collection);
+      const obj: Record<string, unknown> = {};
+      await Promise.all(
+        files.map(async (file) => {
+          let slug =
+            '/' +
+            file.path
+              .replace(/\.(md|mdx)$/, '')
+              .replaceAll('\\', '/')
+              .replace(/index$/, '');
+          if (slug.endsWith('/') && slug !== '/') {
+            slug = slug.slice(0, -1);
+          }
+          obj[slug] = await getFrontmatter(file.absolutePath);
+        }),
+      );
+
+      content += `export const ${k}Frontmatter = ${JSON.stringify(obj)};\n`;
+    }),
+  );
+
+  return content;
+}

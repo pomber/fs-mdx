@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import grayMatter from 'gray-matter';
 import { getConfigHash, loadConfigCached } from '@/config/cached';
-import { generateJS, generateTypes } from '@/map/generate';
+import { generateJS, generateFM, generateTypes } from '@/map/generate';
 import { writeManifest } from '@/map/manifest';
 import { LoadedConfig } from '@/config/load';
 
@@ -39,6 +39,7 @@ export async function start(
 
   let outputGroups = toOutputGroups(config);
   await writeJS(outputGroups, outDir, configPath, configHash, readFrontmatter);
+  await writeFM(outputGroups, outDir, configPath, configHash, readFrontmatter);
   await writeTypes(outputGroups, outDir, configPath);
 
   console.log('[MDX] initialized map file');
@@ -69,6 +70,14 @@ export async function start(
           if (event === 'change') frontmatterCache.delete(file);
 
           await writeJS(
+            outputGroups,
+            outDir,
+            configPath,
+            configHash,
+            readFrontmatter,
+          );
+
+          await writeFM(
             outputGroups,
             outDir,
             configPath,
@@ -127,6 +136,28 @@ async function writeJS(
         readFrontmatter,
       );
       await writeFile(jsOut, jsContent);
+    }),
+  );
+}
+
+async function writeFM(
+  outputGroups: Record<string, LoadedConfig>,
+  outDir: string,
+  configPath: string,
+  configHash: string,
+  readFrontmatter: (file: string) => Promise<unknown>,
+) {
+  await Promise.all(
+    Object.entries(outputGroups).map(async ([fileName, config]) => {
+      const fmOut = path.resolve(outDir, `${fileName}.fm.js`);
+      const fmContent = await generateFM(
+        configPath,
+        config,
+        fmOut,
+        configHash,
+        readFrontmatter,
+      );
+      await writeFile(fmOut, fmContent);
     }),
   );
 }
