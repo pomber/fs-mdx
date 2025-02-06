@@ -34,6 +34,7 @@ export interface MetaCollection<
   Schema extends StandardSchemaV1 = StandardSchemaV1,
 > extends BaseCollection<Schema> {
   type: 'meta';
+  output?: string;
 }
 
 export interface DocCollection<
@@ -41,6 +42,7 @@ export interface DocCollection<
   Async extends boolean = boolean,
 > extends BaseCollection<Schema> {
   type: 'doc';
+  output?: string;
 
   mdxOptions?: MDXOptions;
 
@@ -52,6 +54,7 @@ export interface DocCollection<
 
 export interface DocsCollection {
   type: 'docs';
+  output?: string;
   docs: DocCollection;
   meta: MetaCollection;
 }
@@ -90,6 +93,7 @@ export function defineDocs<
    *  @defaultValue 'content/docs'
    */
   dir?: string | string[];
+  output?: string;
 
   docs?: Omit<DocCollection<DocData, DocAsync>, 'dir' | 'type'>;
   meta?: Omit<MetaCollection<MetaData>, 'dir' | 'type'>;
@@ -105,12 +109,14 @@ export function defineDocs<
     docs: defineCollections({
       type: 'doc',
       dir,
+      output: options?.output,
       schema: frontmatterSchema as unknown as DocData,
       ...options?.docs,
     }),
     meta: defineCollections({
       type: 'meta',
       dir,
+      output: options?.output,
       schema: metaSchema as unknown as MetaData,
       ...options?.meta,
     }),

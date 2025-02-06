@@ -4,6 +4,7 @@ import { writeFile, rm } from 'node:fs/promises';
 import { getConfigHash, loadConfigCached } from '@/utils/config-cache';
 import { generateJS } from '@/map/generate';
 import { readFrontmatter } from '@/utils/read-frontmatter';
+import { type LoadedConfig } from '@/utils/load-config';
 
 /**
  * Start a MDX server that builds index and manifest files.
@@ -21,25 +22,24 @@ export async function start(
 
   let configHash = await getConfigHash(configPath);
   let config = await loadConfigCached(configPath, configHash);
-  const outPath = path.resolve(outDir, `index.ts`);
 
   const frontmatterCache = new Map<string, unknown>();
   let hookUpdate = false;
 
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(
-    outPath,
-    await generateJS(configPath, config, outPath, configHash, (file) => {
-      hookUpdate = true;
-      const cached = frontmatterCache.get(file);
-      if (cached) return cached;
 
-      return readFrontmatter(file).then((res) => {
-        frontmatterCache.set(file, res);
-        return res;
-      });
-    }),
-  );
+  let outputGroups = toOutputGroups(config);
+  await writeFiles(outputGroups, outDir, configPath, configHash, (file) => {
+    hookUpdate = true;
+    const cached = frontmatterCache.get(file);
+    if (cached) return cached;
+
+    return readFrontmatter(file).then((res) => {
+      frontmatterCache.set(file, res);
+      return res;
+    });
+  });
+
   console.log('[MDX] initialized map file');
 
   if (dev) {
@@ -59,20 +59,18 @@ export async function start(
         if (isConfigFile) {
           configHash = await getConfigHash(configPath);
           config = await loadConfigCached(configPath, configHash);
+          outputGroups = toOutputGroups(config);
         }
 
         if (isConfigFile || event !== 'change' || hookUpdate) {
           if (event === 'change') frontmatterCache.delete(file);
 
-          await writeFile(
-            outPath,
-            await generateJS(
-              configPath,
-              config,
-              outPath,
-              configHash,
-              readFrontmatter,
-            ),
+          await writeFiles(
+            outputGroups,
+            outDir,
+            configPath,
+            configHash,
+            readFrontmatter,
           );
 
           console.log('[MDX] Updated map file');
@@ -87,4 +85,38 @@ export async function start(
       void instance.close();
     });
   }
+}
+
+async function writeFiles(
+  outputGroups: Record<string, LoadedConfig>,
+  outDir: string,
+  configPath: string,
+  configHash: string,
+  getFrontmatter: (file: string) => unknown | Promise<unknown>,
+) {
+  await Promise.all(
+    Object.entries(outputGroups).map(async ([fileName, config]) => {
+      const jsOut = path.resolve(outDir, `${fileName}.ts`);
+      const jsContent = await generateJS(
+        configPath,
+        config,
+        jsOut,
+        configHash,
+        getFrontmatter,
+      );
+      await writeFile(jsOut, jsContent);
+    }),
+  );
+}
+
+function toOutputGroups(config: LoadedConfig) {
+  const outputGroups: Record<string, LoadedConfig> = {};
+  for (const [k, v] of config.collections.entries()) {
+    let output = v.output ?? 'index';
+    if (!outputGroups[output]) {
+      outputGroups[output] = { ...config, collections: new Map() };
+    }
+    outputGroups[output].collections.set(k, v);
+  }
+  return outputGroups;
 }
