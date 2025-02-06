@@ -1,11 +1,9 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import grayMatter from 'gray-matter';
-import { getConfigHash, loadConfigCached } from '@/config/cached';
-import { generateJS, generateFM, generateTypes } from '@/map/generate';
-import { writeManifest } from '@/map/manifest';
-import { LoadedConfig } from '@/config/load';
+import { writeFile, rm } from 'node:fs/promises';
+import { getConfigHash, loadConfigCached } from '@/utils/config-cache';
+import { generateJS } from '@/map/generate';
+import { readFrontmatter } from '@/utils/read-frontmatter';
 
 /**
  * Start a MDX server that builds index and manifest files.
@@ -17,31 +15,31 @@ export async function start(
   configPath: string,
   outDir: string,
 ): Promise<void> {
+  // delete previous output
+  void rm(path.resolve(outDir, `index.js`), { force: true });
+  void rm(path.resolve(outDir, `index.d.ts`), { force: true });
+
   let configHash = await getConfigHash(configPath);
   let config = await loadConfigCached(configPath, configHash);
-  const manifestPath = path.resolve(outDir, 'manifest.json');
+  const outPath = path.resolve(outDir, `index.ts`);
 
   const frontmatterCache = new Map<string, unknown>();
   let hookUpdate = false;
 
-  // TODO: Stream and read only the header
-  const readFrontmatter = async (file: string): Promise<unknown> => {
-    const cached = frontmatterCache.get(file);
-    if (cached) return cached;
-    hookUpdate = true;
-
-    return grayMatter({
-      content: await readFile(file).then((res) => res.toString()),
-    }).data;
-  };
-
   fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(
+    outPath,
+    await generateJS(configPath, config, outPath, configHash, (file) => {
+      hookUpdate = true;
+      const cached = frontmatterCache.get(file);
+      if (cached) return cached;
 
-  let outputGroups = toOutputGroups(config);
-  await writeJS(outputGroups, outDir, configPath, configHash, readFrontmatter);
-  await writeFM(outputGroups, outDir, configPath, configHash, readFrontmatter);
-  await writeTypes(outputGroups, outDir, configPath);
-
+      return readFrontmatter(file).then((res) => {
+        frontmatterCache.set(file, res);
+        return res;
+      });
+    }),
+  );
   console.log('[MDX] initialized map file');
 
   if (dev) {
@@ -61,28 +59,20 @@ export async function start(
         if (isConfigFile) {
           configHash = await getConfigHash(configPath);
           config = await loadConfigCached(configPath, configHash);
-          outputGroups = toOutputGroups(config);
-          await writeTypes(outputGroups, outDir, configPath);
-          console.log('[MDX] Updated map types');
         }
 
         if (isConfigFile || event !== 'change' || hookUpdate) {
           if (event === 'change') frontmatterCache.delete(file);
 
-          await writeJS(
-            outputGroups,
-            outDir,
-            configPath,
-            configHash,
-            readFrontmatter,
-          );
-
-          await writeFM(
-            outputGroups,
-            outDir,
-            configPath,
-            configHash,
-            readFrontmatter,
+          await writeFile(
+            outPath,
+            await generateJS(
+              configPath,
+              config,
+              outPath,
+              configHash,
+              readFrontmatter,
+            ),
           );
 
           console.log('[MDX] Updated map file');
@@ -97,81 +87,4 @@ export async function start(
       void instance.close();
     });
   }
-
-  if (config.global?.generateManifest && !dev) {
-    process.on('exit', () => {
-      console.log('[MDX] writing manifest');
-      writeManifest(manifestPath, config);
-    });
-  }
-}
-
-function toOutputGroups(config: LoadedConfig) {
-  const outputGroups: Record<string, LoadedConfig> = {};
-  for (const [k, v] of config.collections.entries()) {
-    let output = v.output ?? 'index';
-    if (!outputGroups[output]) {
-      outputGroups[output] = { ...config, collections: new Map() };
-    }
-    outputGroups[output].collections.set(k, v);
-  }
-  return outputGroups;
-}
-
-async function writeJS(
-  outputGroups: Record<string, LoadedConfig>,
-  outDir: string,
-  configPath: string,
-  configHash: string,
-  readFrontmatter: (file: string) => Promise<unknown>,
-) {
-  await Promise.all(
-    Object.entries(outputGroups).map(async ([fileName, config]) => {
-      const jsOut = path.resolve(outDir, `${fileName}.js`);
-      const jsContent = await generateJS(
-        configPath,
-        config,
-        jsOut,
-        configHash,
-        readFrontmatter,
-      );
-      await writeFile(jsOut, jsContent);
-    }),
-  );
-}
-
-async function writeFM(
-  outputGroups: Record<string, LoadedConfig>,
-  outDir: string,
-  configPath: string,
-  configHash: string,
-  readFrontmatter: (file: string) => Promise<unknown>,
-) {
-  await Promise.all(
-    Object.entries(outputGroups).map(async ([fileName, config]) => {
-      const fmOut = path.resolve(outDir, `${fileName}.fm.js`);
-      const fmContent = await generateFM(
-        configPath,
-        config,
-        fmOut,
-        configHash,
-        readFrontmatter,
-      );
-      await writeFile(fmOut, fmContent);
-    }),
-  );
-}
-
-async function writeTypes(
-  outputGroups: Record<string, LoadedConfig>,
-  outDir: string,
-  configPath: string,
-) {
-  await Promise.all(
-    Object.entries(outputGroups).map(async ([fileName, config]) => {
-      const typeOut = path.resolve(outDir, `${fileName}.d.ts`);
-      const typeContent = generateTypes(configPath, config, typeOut);
-      await writeFile(typeOut, typeContent);
-    }),
-  );
 }

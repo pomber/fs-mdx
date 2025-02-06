@@ -1,14 +1,12 @@
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
 import { parse } from 'node:querystring';
 import grayMatter from 'gray-matter';
 import { type LoaderContext } from 'webpack';
-import { type StructuredData } from 'fumadocs-core/mdx-plugins';
-import { getConfigHash, loadConfigCached } from '@/config/cached';
+import { getConfigHash, loadConfigCached } from '@/utils/config-cache';
 import { buildMDX } from '@/utils/build-mdx';
-import { getManifestEntryPath } from '@/map/manifest';
 import { formatError } from '@/utils/format-error';
 import { getGitTimestamp } from './utils/git-timestamp';
+import type { StandardSchemaV1 } from '@standard-schema/spec';
 
 export interface Options {
   /**
@@ -16,15 +14,6 @@ export interface Options {
    */
   _ctx: {
     configPath: string;
-  };
-}
-
-export interface MetaFile {
-  path: string;
-  data: {
-    frontmatter: Record<string, unknown>;
-    structuredData?: StructuredData;
-    [key: string]: unknown;
   };
 }
 
@@ -72,17 +61,18 @@ export default async function loader(
       ? config.collections.get(collectionId)
       : undefined;
 
+  if (collection && collection.type === 'docs') collection = collection.docs;
   if (collection && collection.type !== 'doc') {
     collection = undefined;
   }
 
-  const mdxOptions = collection?.mdxOptions ?? config.defaultMdxOptions;
+  const mdxOptions =
+    collection?.mdxOptions ?? (await config.getDefaultMDXOptions());
 
-  let frontmatter = matter.data;
   if (collection?.schema) {
     let schema = collection.schema;
 
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !('~standard' in schema)) {
       schema = schema({
         async buildMDX(v, options = mdxOptions) {
           const res = await buildMDX(
@@ -98,13 +88,21 @@ export default async function loader(
       });
     }
 
-    const result = await schema.safeParseAsync(frontmatter);
-    if (result.error) {
-      callback(new Error(formatError(filePath, result.error)));
-      return;
-    }
+    if ('~standard' in schema) {
+      const result = await (schema as StandardSchemaV1)['~standard'].validate(
+        matter.data,
+      );
+      if (result.issues) {
+        callback(
+          new Error(
+            formatError(`invalid frontmatter in ${filePath}:`, result.issues),
+          ),
+        );
+        return;
+      }
 
-    frontmatter = result.data as Record<string, unknown>;
+      matter.data = result.value as Record<string, unknown>;
+    }
   }
 
   let timestamp: number | undefined;
@@ -112,15 +110,20 @@ export default async function loader(
     timestamp = (await getGitTimestamp(filePath))?.getTime();
 
   try {
+    // ensure the line number is correct in dev mode
+    const lineOffset = '\n'.repeat(
+      this.mode === 'development' ? lines(source) - lines(matter.content) : 0,
+    );
+
     const file = await buildMDX(
       collectionId ?? 'global',
       configHash,
-      matter.content,
+      lineOffset + matter.content,
       {
         development: this.mode === 'development',
         ...mdxOptions,
         filePath,
-        frontmatter,
+        frontmatter: matter.data,
         data: {
           lastModified: timestamp,
         },
@@ -129,17 +132,6 @@ export default async function loader(
     );
 
     callback(undefined, String(file.value), file.map ?? undefined);
-
-    if (config.global?.generateManifest) {
-      await fs.mkdir('.next/cache/fumadocs', { recursive: true });
-      await fs.writeFile(
-        getManifestEntryPath(filePath),
-        JSON.stringify({
-          path: filePath,
-          data: file.data,
-        } as MetaFile),
-      );
-    }
   } catch (error) {
     if (!(error instanceof Error)) throw error;
 
@@ -147,4 +139,14 @@ export default async function loader(
     error.message = `${fpath}:${error.name}: ${error.message}`;
     callback(error);
   }
+}
+
+function lines(s: string) {
+  let num = 0;
+
+  for (const c of s) {
+    if (c === '\n') num++;
+  }
+
+  return num;
 }

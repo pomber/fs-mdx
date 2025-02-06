@@ -2,82 +2,127 @@ import * as path from 'node:path';
 import fg from 'fast-glob';
 import { getTypeFromPath } from '@/utils/get-type-from-path';
 import type { FileInfo } from '@/config/types';
-import {
-  type InternalDocCollection,
-  type InternalMetaCollection,
-  type LoadedConfig,
-} from '@/config/load';
+import { type LoadedConfig } from '@/utils/load-config';
+import type { DocCollection, MetaCollection } from '@/config';
 
 export async function generateJS(
   configPath: string,
   config: LoadedConfig,
   outputPath: string,
   configHash: string,
-  getFrontmatter: (file: string) => Promise<unknown>,
+  getFrontmatter: (file: string) => unknown | Promise<unknown>,
 ): Promise<string> {
   const outDir = path.dirname(outputPath);
-  const imports: ImportInfo[] = [
-    {
+  let asyncInit = false;
+  const lines: string[] = [
+    getImportCode({
       type: 'named',
-      names: ['toRuntime', 'toRuntimeAsync'],
+      names: ['_runtime'],
       specifier: 'fs-mdx',
-    },
+    }),
+    getImportCode({
+      type: 'namespace',
+      specifier: toImportPath(configPath, outDir),
+      name: '_source',
+    }),
   ];
-  const importedCollections = new Set<string>();
 
   config._runtime.files.clear();
   const entries = Array.from(config.collections.entries());
-  const declares = entries.map(async ([k, collection]) => {
-    const files = await getCollectionFiles(collection);
+
+  async function getEntries(
+    collectionName: string,
+    collection: MetaCollection | DocCollection,
+    files: FileInfo[],
+  ) {
     const items = files.map(async (file, i) => {
-      config._runtime.files.set(file.absolutePath, k);
+      config._runtime.files.set(file.absolutePath, collectionName);
+      const importId = `${collectionName}_${collection.type}_${i}`;
+      lines.unshift(
+        getImportCode({
+          type: 'namespace',
+          name: importId,
+          specifier: `${toImportPath(file.absolutePath, outDir)}?collection=${collectionName}&hash=${configHash}`,
+        }),
+      );
 
-      if (collection.type === 'doc' && collection.async) {
-        const importPath = `${toImportPath(file.absolutePath, outDir)}?hash=${configHash}&collection=${k}`;
-        const frontmatter = await getFrontmatter(file.absolutePath);
-
-        return `toRuntimeAsync(${JSON.stringify(frontmatter)}, () => import(${JSON.stringify(importPath)}), ${JSON.stringify(file)})`;
-      }
-
-      const importName = `${k}_${i.toString()}`;
-      imports.push({
-        type: 'namespace',
-        name: importName,
-        specifier: `${toImportPath(file.absolutePath, outDir)}?collection=${k}&hash=${configHash}`,
-      });
-
-      return `toRuntime("${collection.type}", ${importName}, ${JSON.stringify(file)})`;
+      return `{ info: ${JSON.stringify(file)}, data: ${importId} }`;
     });
-    const resolvedItems = await Promise.all(items);
 
-    if (collection.transform) {
-      if (config.global) importedCollections.add('default'); // import global config
-      importedCollections.add(k);
+    return Promise.all(items);
+  }
+
+  async function getAsyncEntries(files: FileInfo[]) {
+    if (!asyncInit) {
+      lines.unshift(
+        getImportCode({
+          type: 'named',
+          specifier: 'fs-mdx/runtime/async',
+          names: ['_runtimeAsync', 'buildConfig'],
+        }),
+        'const [err, _sourceConfig] = buildConfig(_source)',
+        'if (!_sourceConfig) throw new Error(err)',
+      );
+
+      asyncInit = true;
     }
 
-    // TODO: remove `transform` API on next major, migrate to runtime transform (e.g. transform & re-export in `source.ts`)
-    return collection.transform
-      ? `export const ${k} = await Promise.all([${resolvedItems.join(', ')}].map(v => c_${k}.transform(v, ${config.global ? 'c_default' : 'undefined'})));`
-      : `export const ${k} = [${resolvedItems.join(', ')}];`;
+    const entries = files.map(async (file) => {
+      const frontmatter = await getFrontmatter(file.absolutePath);
+
+      return JSON.stringify({
+        info: file,
+        data: frontmatter,
+      });
+    });
+
+    return Promise.all(entries);
+  }
+
+  const declares = entries.map(async ([k, collection]) => {
+    if (collection.type === 'docs') {
+      const docs = await getCollectionFiles(collection.docs);
+      const metas = await getCollectionFiles(collection.meta);
+
+      if (collection.docs.async) {
+        const docsEntries = (await getAsyncEntries(docs)).join(', ');
+        const metaEntries = (await getEntries(k, collection.meta, metas)).join(
+          ', ',
+        );
+
+        return `export const ${k} = _runtimeAsync.docs<typeof _source.${k}>([${docsEntries}], [${metaEntries}], "${k}", _sourceConfig)`;
+      }
+
+      const docsEntries = (await getEntries(k, collection.docs, docs)).join(
+        ', ',
+      );
+      const metaEntries = (await getEntries(k, collection.meta, metas)).join(
+        ', ',
+      );
+
+      return `export const ${k} = _runtime.docs<typeof _source.${k}>([${docsEntries}], [${metaEntries}])`;
+    }
+
+    const files = await getCollectionFiles(collection);
+
+    if (collection.type === 'doc' && collection.async) {
+      return `export const ${k} = _runtimeAsync.doc<typeof _source.${k}>([${(await getAsyncEntries(files)).join(', ')}], "${k}", _sourceConfig)`;
+    }
+
+    return `export const ${k} = _runtime.${collection.type}<typeof _source.${k}>([${(await getEntries(k, collection, files)).join(', ')}]);`;
   });
 
   const resolvedDeclares = await Promise.all(declares);
 
-  if (importedCollections.size > 0) {
-    imports.push({
-      type: 'named',
-      names: Array.from(importedCollections.values())
-        .sort()
-        .map((v) => [v, `c_${v}`] as const),
-      specifier: toImportPath(configPath, outDir),
-    });
-  }
-
-  return [...imports.map(getImportCode), ...resolvedDeclares].join('\n');
+  return [
+    `// @ts-nocheck -- skip type checking`,
+    ...lines,
+    ...resolvedDeclares,
+  ].join('\n');
 }
 
 async function getCollectionFiles(
-  collection: InternalDocCollection | InternalMetaCollection,
+  collection: DocCollection | MetaCollection,
 ): Promise<FileInfo[]> {
   const files = new Map<string, FileInfo>();
   const dirs = Array.isArray(collection.dir)
@@ -140,70 +185,15 @@ function getImportCode(info: ImportInfo): string {
 }
 
 export function toImportPath(file: string, dir: string): string {
-  let importPath = path.relative(dir, file);
+  const ext = path.extname(file);
+  let importPath = path.relative(
+    dir,
+    ext === '.ts' ? file.substring(0, file.length - ext.length) : file,
+  );
 
   if (!path.isAbsolute(importPath) && !importPath.startsWith('.')) {
     importPath = `./${importPath}`;
   }
 
   return importPath.replaceAll(path.sep, '/');
-}
-
-export function generateTypes(
-  configPath: string,
-  config: LoadedConfig,
-  outputPath: string,
-): string {
-  const importPath = JSON.stringify(
-    toImportPath(configPath, path.dirname(outputPath)),
-  );
-  const lines: string[] = ['import type { GetOutput } from "fs-mdx/config"'];
-
-  for (const name of config.collections.keys()) {
-    lines.push(
-      `export declare const ${name}: GetOutput<typeof import(${importPath}).${name}>`,
-    );
-  }
-
-  return lines.join('\n');
-}
-
-export async function generateFM(
-  configPath: string,
-  config: LoadedConfig,
-  outputPath: string,
-  configHash: string,
-  getFrontmatter: (file: string) => Promise<unknown>,
-): Promise<string> {
-  const entries = Array.from(config.collections.entries());
-  let content = '';
-
-  await Promise.all(
-    entries.map(async ([k, collection]) => {
-      if (collection.type !== 'doc') {
-        return;
-      }
-
-      const files = await getCollectionFiles(collection);
-      const obj: Record<string, unknown> = {};
-      await Promise.all(
-        files.map(async (file) => {
-          let slug =
-            '/' +
-            file.path
-              .replace(/\.(md|mdx)$/, '')
-              .replaceAll('\\', '/')
-              .replace(/index$/, '');
-          if (slug.endsWith('/') && slug !== '/') {
-            slug = slug.slice(0, -1);
-          }
-          obj[slug] = await getFrontmatter(file.absolutePath);
-        }),
-      );
-
-      content += `export const ${k}Frontmatter = ${JSON.stringify(obj)};\n`;
-    }),
-  );
-
-  return content;
 }
