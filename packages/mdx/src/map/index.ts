@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { writeFile, rm } from 'node:fs/promises';
 import { getConfigHash, loadConfigCached } from '@/utils/config-cache';
-import { generateJS } from '@/map/generate';
+import { generateFM, generateJS } from '@/map/generate';
 import { readFrontmatter } from '@/utils/read-frontmatter';
 import { type LoadedConfig } from '@/utils/load-config';
 
@@ -96,6 +96,10 @@ async function writeFiles(
 ) {
   await Promise.all(
     Object.entries(outputGroups).map(async ([fileName, config]) => {
+      const fmContent = await generateFM(config, getFrontmatter);
+      const fmOut = path.resolve(outDir, `${fileName}.fm.ts`);
+      await writeFile(fmOut, fmContent);
+
       const jsOut = path.resolve(outDir, `${fileName}.ts`);
       const jsContent = await generateJS(
         configPath,

@@ -25,10 +25,19 @@ export async function generateJS(
       specifier: toImportPath(configPath, outDir),
       name: '_source',
     }),
+    getImportCode({
+      type: 'namespace',
+      specifier: 'node:path',
+      name: 'path',
+    }),
   ];
 
   config._runtime.files.clear();
   const entries = Array.from(config.collections.entries());
+
+  // import data
+  const coll = entries[0][1];
+  const fileName = coll.output || 'index';
 
   async function getEntries(
     collectionName: string,
@@ -79,6 +88,16 @@ export async function generateJS(
     return Promise.all(entries);
   }
 
+  const imports = entries
+    .filter(([k, collection]) => collection.type === 'doc')
+    .map(([k]) =>
+      getImportCode({
+        type: 'named',
+        names: [`${k}Data`],
+        specifier: './' + fileName + '.fm.ts',
+      }),
+    );
+
   const declares = entries.map(async ([k, collection]) => {
     if (collection.type === 'docs') {
       const docs = await getCollectionFiles(collection.docs);
@@ -103,12 +122,13 @@ export async function generateJS(
       return `export const ${k} = _runtime.docs<typeof _source.${k}>([${docsEntries}], [${metaEntries}])`;
     }
 
-    const files = await getCollectionFiles(collection);
-
     if (collection.type === 'doc' && collection.async) {
-      return `export const ${k} = _runtimeAsync.doc<typeof _source.${k}>([${(await getAsyncEntries(files)).join(', ')}], "${k}", _sourceConfig)`;
+      const docEntries = `Object.keys(${k}Data).map(k=>({info:{path:k,absolutePath:path.join(process.cwd(),"${collection.dir}",k)},data:${k}Data[k]}))`;
+
+      return `export const ${k} = _runtimeAsync.doc<typeof _source.${k}>(${docEntries}, "${k}", _sourceConfig)`;
     }
 
+    const files = await getCollectionFiles(collection);
     return `export const ${k} = _runtime.${collection.type}<typeof _source.${k}>([${(await getEntries(k, collection, files)).join(', ')}]);`;
   });
 
@@ -117,6 +137,7 @@ export async function generateJS(
   return [
     `// @ts-nocheck -- skip type checking`,
     ...lines,
+    ...imports,
     ...resolvedDeclares,
   ].join('\n');
 }
@@ -196,4 +217,28 @@ export function toImportPath(file: string, dir: string): string {
   }
 
   return importPath.replaceAll(path.sep, '/');
+}
+
+export async function generateFM(
+  config: LoadedConfig,
+  getFrontmatter: (file: string) => unknown | Promise<unknown>,
+): Promise<string> {
+  const entries = Array.from(config.collections.entries());
+  let content = '';
+  await Promise.all(
+    entries.map(async ([k, collection]) => {
+      if (collection.type !== 'doc') {
+        return;
+      }
+      const files = await getCollectionFiles(collection);
+      const obj: Record<string, unknown> = {};
+      await Promise.all(
+        files.map(async (file) => {
+          obj[file.path] = await getFrontmatter(file.absolutePath);
+        }),
+      );
+      content += `export const ${k}Data = ${JSON.stringify(obj)};\n`;
+    }),
+  );
+  return content;
 }
