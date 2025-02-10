@@ -1,6 +1,6 @@
 {
   "name": "fs-mdx",
-  "version": "0.2.1",
+  "version": "0.3.2",
   "description": "An MDX source for Fumadocs",
   "keywords": [
     "NextJs",

@@ -123,6 +123,20 @@ export async function generateJS(
     }
 
     if (collection.type === 'doc' && collection.async) {
+      if (!asyncInit) {
+        lines.unshift(
+          getImportCode({
+            type: 'named',
+            specifier: 'fs-mdx/runtime/async',
+            names: ['_runtimeAsync', 'buildConfig'],
+          }),
+          'const [err, _sourceConfig] = buildConfig(_source)',
+          'if (!_sourceConfig) throw new Error(err)',
+        );
+
+        asyncInit = true;
+      }
+
       const docEntries = `Object.keys(${k}Data).map(k=>({info:{path:k,absolutePath:path.join(process.cwd(),"${collection.dir}",k)},data:${k}Data[k]}))`;
 
       return `export const ${k} = _runtimeAsync.doc<typeof _source.${k}>(${docEntries}, "${k}", _sourceConfig)`;
