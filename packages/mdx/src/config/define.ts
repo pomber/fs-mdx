@@ -35,6 +35,7 @@ export interface MetaCollection<
 > extends BaseCollection<Schema> {
   type: 'meta';
   output?: string;
+  localized?: boolean;
 }
 
 export interface DocCollection<
@@ -43,7 +44,7 @@ export interface DocCollection<
 > extends BaseCollection<Schema> {
   type: 'doc';
   output?: string;
-
+  localized?: boolean;
   mdxOptions?: MDXOptions;
 
   /**
@@ -55,6 +56,7 @@ export interface DocCollection<
 export interface DocsCollection {
   type: 'docs';
   output?: string;
+  localized?: boolean;
   docs: DocCollection;
   meta: MetaCollection;
 }
@@ -94,6 +96,7 @@ export function defineDocs<
    */
   dir?: string | string[];
   output?: string;
+  localized?: boolean;
 
   docs?: Omit<DocCollection<DocData, DocAsync>, 'dir' | 'type'>;
   meta?: Omit<MetaCollection<MetaData>, 'dir' | 'type'>;
@@ -110,6 +113,7 @@ export function defineDocs<
       type: 'doc',
       dir,
       output: options?.output,
+      localized: options?.localized,
       schema: frontmatterSchema as unknown as DocData,
       ...options?.docs,
     }),
@@ -117,6 +121,7 @@ export function defineDocs<
       type: 'meta',
       dir,
       output: options?.output,
+      localized: options?.localized,
       schema: metaSchema as unknown as MetaData,
       ...options?.meta,
     }),

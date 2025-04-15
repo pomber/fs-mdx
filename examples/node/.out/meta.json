@@ -1,0 +1,14 @@
+[
+  {
+    "title": "Docs",
+    "pages": [
+      "foo",
+      "index"
+    ],
+    "_file": {
+      "path": "meta.json",
+      "absolutePath": "C:/p/dev/fs-mdx/examples/node/content/docs/en/meta.json",
+      "_part": "en\\meta.json"
+    }
+  }
+]

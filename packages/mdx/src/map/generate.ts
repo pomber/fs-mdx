@@ -137,7 +137,7 @@ export async function generateJS(
         asyncInit = true;
       }
 
-      const docEntries = `Object.keys(${k}Data).map(k=>({info:{path:k,absolutePath:path.join(process.cwd(),"${collection.dir}",k)},data:${k}Data[k]}))`;
+      const docEntries = `Object.entries(${k}Data).map(([k,data])=>({info:{path:k,absolutePath:path.join(process.cwd(),"${collection.dir}",data._part)},data}))`;
 
       return `export const ${k} = _runtimeAsync.doc<typeof _source.${k}>(${docEntries}, "${k}", _sourceConfig)`;
     }
@@ -174,9 +174,14 @@ async function getCollectionFiles(
       for (const item of result) {
         if (getTypeFromPath(item) !== collection.type) continue;
 
+        const relativePath = path.relative(dir, item);
+
         files.set(item, {
-          path: path.relative(dir, item),
+          path: collection.localized
+            ? getLocalizedPath(relativePath)
+            : relativePath,
           absolutePath: item,
+          _part: relativePath,
         });
       }
     }),
@@ -248,11 +253,25 @@ export async function generateFM(
       const obj: Record<string, unknown> = {};
       await Promise.all(
         files.map(async (file) => {
-          obj[file.path] = await getFrontmatter(file.absolutePath);
+          const fm = (await getFrontmatter(file.absolutePath)) || {};
+
+          obj[file.path] = {
+            ...fm,
+            _part: file._part, // keep the original path
+          };
         }),
       );
       content += `export const ${k}Data = ${JSON.stringify(obj)};\n`;
     }),
   );
   return content;
+}
+
+// move the locale to a suffix: es/foo.mdx -> foo.es.mdx
+function getLocalizedPath(filepath: string) {
+  const parts = filepath.split(path.sep);
+  const locale = parts[0].replace('.', '');
+  const rest = path.join(...parts.slice(1));
+  const ext = path.extname(rest);
+  return rest.replace(ext, locale !== 'en' ? `.${locale}${ext}` : ext);
 }

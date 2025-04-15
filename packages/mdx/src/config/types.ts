@@ -44,6 +44,7 @@ export type InferSchemaType<C> =
 export interface FileInfo {
   path: string;
   absolutePath: string;
+  _part: string;
 }
 
 export interface MarkdownProps {

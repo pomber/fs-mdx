@@ -1,0 +1,54 @@
+[
+  {
+    "type": "page",
+    "path": "foo.mdx",
+    "data": {
+      "title": "Bar en",
+      "_part": "en\\foo.mdx",
+      "_file": {
+        "path": "foo.mdx",
+        "absolutePath": "C:\\p\\dev\\fs-mdx\\examples\\node\\content\\docs\\en\\foo.mdx"
+      }
+    }
+  },
+  {
+    "type": "page",
+    "path": "foo.es.mdx",
+    "data": {
+      "title": "Bar es",
+      "_part": "es\\foo.mdx",
+      "_file": {
+        "path": "foo.es.mdx",
+        "absolutePath": "C:\\p\\dev\\fs-mdx\\examples\\node\\content\\docs\\es\\foo.mdx"
+      }
+    }
+  },
+  {
+    "type": "page",
+    "path": "index.mdx",
+    "data": {
+      "title": "Hello World",
+      "_part": "en\\index.mdx",
+      "_file": {
+        "path": "index.mdx",
+        "absolutePath": "C:\\p\\dev\\fs-mdx\\examples\\node\\content\\docs\\en\\index.mdx"
+      }
+    }
+  },
+  {
+    "type": "meta",
+    "path": "meta.json",
+    "data": {
+      "title": "Docs",
+      "pages": [
+        "foo",
+        "index"
+      ],
+      "_file": {
+        "path": "meta.json",
+        "absolutePath": "C:/p/dev/fs-mdx/examples/node/content/docs/en/meta.json",
+        "_part": "en\\meta.json"
+      }
+    }
+  }
+]

@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --loader=@mdx-js/node-loader index.js"
+    "start": "tsx index.ts"
   },
   "dependencies": {
     "@mdx-js/node-loader": "^3.1.0",
     "fs-mdx": "workspace:*",
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "fumadocs-core": "15.0.3"
   },
   "devDependencies": {
     "tsx": "^4.7.1",
