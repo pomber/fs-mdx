@@ -4,22 +4,10 @@
     "path": "foo.mdx",
     "data": {
       "title": "Bar en",
-      "_part": "en\\foo.mdx",
+      "_part": "en/foo.mdx",
       "_file": {
         "path": "foo.mdx",
-        "absolutePath": "C:\\p\\dev\\fs-mdx\\examples\\node\\content\\docs\\en\\foo.mdx"
-      }
-    }
-  },
-  {
-    "type": "page",
-    "path": "foo.es.mdx",
-    "data": {
-      "title": "Bar es",
-      "_part": "es\\foo.mdx",
-      "_file": {
-        "path": "foo.es.mdx",
-        "absolutePath": "C:\\p\\dev\\fs-mdx\\examples\\node\\content\\docs\\es\\foo.mdx"
+        "absolutePath": "/workspace/fs-mdx/examples/node/content/docs/en/foo.mdx"
       }
     }
   },
@@ -28,10 +16,22 @@
     "path": "index.mdx",
     "data": {
       "title": "Hello World",
-      "_part": "en\\index.mdx",
+      "_part": "en/index.mdx",
       "_file": {
         "path": "index.mdx",
-        "absolutePath": "C:\\p\\dev\\fs-mdx\\examples\\node\\content\\docs\\en\\index.mdx"
+        "absolutePath": "/workspace/fs-mdx/examples/node/content/docs/en/index.mdx"
+      }
+    }
+  },
+  {
+    "type": "page",
+    "path": "foo.es.mdx",
+    "data": {
+      "title": "Bar es",
+      "_part": "es/foo.mdx",
+      "_file": {
+        "path": "foo.es.mdx",
+        "absolutePath": "/workspace/fs-mdx/examples/node/content/docs/es/foo.mdx"
       }
     }
   },
@@ -46,8 +46,8 @@
       ],
       "_file": {
         "path": "meta.json",
-        "absolutePath": "C:/p/dev/fs-mdx/examples/node/content/docs/en/meta.json",
-        "_part": "en\\meta.json"
+        "absolutePath": "/workspace/fs-mdx/examples/node/content/docs/en/meta.json",
+        "_part": "en/meta.json"
       }
     }
   }
